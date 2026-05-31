@@ -1,0 +1,7 @@
+Employee ID,Employee Name,State,Basic Salary,Dearness Allowance (DA),Gross Salary,HRA Received,Annual Rent Paid,Metro City,Employee EPF Deduction,Employer EPF Contribution,Employer EPS Contribution,Employee ESI Deduction,Professional Tax Deduction,Tax Regime
+CED-1001,Ananya Rao,Maharashtra,28000,2000,52000,12000,240000,Yes,3600,1101,1250,0,200,Old
+CED-1002,Karan Mehta,Karnataka,12000,1000,30000,8000,144000,No,1200,477,1083,0,200,New
+CED-1003,Ishita Sen,Tamil Nadu,9500,500,19000,4500,96000,Yes,1200,367,833,120,0,Old
+CED-1004,Rohit Nair,Delhi,23000,0,35000,9000,180000,Yes,2760,844,1250,0,0,Old
+CED-1005,Meera Iyer,Maharashtra,46000,0,78000,22000,300000,Yes,5520,1600,1000,0,200,New
+CED-1006,Dev Malhotra,Gujarat,8200,800,20000,4200,84000,No,0,0,0,150,0,Old
