@@ -6,12 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ComplianceRing } from "@/components/compliance-ring";
 import { MonthlyComplianceChart } from "@/components/insights-chart";
-import { samplePayrollRows } from "@/lib/sample-data";
-import { validatePayroll } from "@/lib/validation";
-
 export default function LandingPage() {
-  const result = validatePayroll(samplePayrollRows);
-
   return (
     <main>
       <Navbar />
@@ -61,39 +56,80 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="grid gap-5">
-            <Card className="overflow-hidden">
-              <CardHeader className="flex-row items-center justify-between space-y-0 bg-white">
+            {/* Empty-State Message & Demo Showcase Banner */}
+            <Card className="border-cedur-200 bg-gradient-to-br from-cedur-50/50 to-white">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="border-cedur-300 bg-cedur-50 text-cedur-700">
+                    Demo Preview
+                  </Badge>
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    Example Compliance Analytics
+                  </span>
+                </div>
+                <h2 className="mt-4 text-xl font-bold text-slate-900 sm:text-2xl">
+                  See How Your Compliance Report Will Look
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Upload payroll data to generate automated statutory compliance reports, identify payroll risks, and receive detailed EPF, ESI, PT, and HRA validation insights. The charts below are illustrative examples only.
+                </p>
+                <div className="mt-4 rounded-xl bg-white p-3 border text-xs text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-cedur-500 shrink-0" />
+                  <span>Your actual insights will appear here after payroll processing.</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Illustrative Dashboard Preview */}
+            <Card className="overflow-hidden border-slate-200 shadow-soft">
+              <CardHeader className="flex-row items-center justify-between bg-slate-50/60 border-b py-4">
                 <div>
-                  <CardTitle>Compliance Snapshot</CardTitle>
-                  <CardDescription>Live rule engine preview</CardDescription>
+                  <CardTitle className="text-base font-bold">Sample Compliance Report Preview</CardTitle>
+                  <CardDescription className="text-xs">Visualizing statutory payroll insights</CardDescription>
                 </div>
-                <Badge variant="success">Active</Badge>
+                <Badge variant="outline" className="bg-slate-200/70 border-slate-300 text-slate-700 pointer-events-none">
+                  Sample Data
+                </Badge>
               </CardHeader>
-              <CardContent className="grid gap-6 p-6 sm:grid-cols-[0.7fr_1fr]">
-                <div className="grid place-items-center">
-                  <ComplianceRing score={result.score} />
+              <CardContent className="grid gap-6 p-6 sm:grid-cols-[0.8fr_1.2fr]">
+                <div className="flex flex-col items-center justify-center border-b pb-6 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-6">
+                  <ComplianceRing score={95} size="sm" />
+                  <p className="mt-3 text-sm font-semibold text-slate-800">Example Score Card</p>
+                  <p className="text-center text-xs text-muted-foreground mt-1 max-w-[150px]">
+                    Ideal benchmark targets 100% compliant filings
+                  </p>
                 </div>
-                <div className="grid gap-3">
+                
+                <div className="grid gap-2">
                   {[
-                    ["EPF issues", result.issues.filter((issue) => issue.category === "EPF").length],
-                    ["EPS issues", result.issues.filter((issue) => issue.category === "EPS").length],
-                    ["ESI issues", result.issues.filter((issue) => issue.category === "ESI").length],
-                    ["PT/HRA alerts", result.issues.filter((issue) => ["Professional Tax", "HRA", "Tax Regime"].includes(issue.category)).length]
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="rounded-2xl border bg-muted/40 p-4">
-                      <p className="text-sm text-muted-foreground">{label}</p>
-                      <p className="mt-1 text-2xl font-bold">{value}</p>
+                    ["EPF / EPS Analysis", "Checked Basic + DA slabs and voluntary caps", "4 Rules Checked"],
+                    ["ESI Eligibility Check", "Flagged monthly gross salary limits", "1 Risk Alert"],
+                    ["Professional Tax", "State slab audit for MH, KA, TN, and DL", "Validated"],
+                    ["HRA Tax Exemptions", "Calculated 3 statutory exemption routes", "Old Regime Only"]
+                  ].map(([label, desc, status]) => (
+                    <div key={label} className="rounded-xl border bg-muted/20 p-3 hover:bg-muted/40 transition">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-slate-800">{label}</p>
+                        <span className="text-[10px] font-bold text-cedur-600 bg-cedur-50 border border-cedur-100 rounded-full px-2 py-0.5">
+                          {status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Compliance Charts</CardTitle>
-                <CardDescription>Monthly health across statutory checks</CardDescription>
+
+            {/* Illustrative Trend Chart Card */}
+            <Card className="border-slate-200">
+              <CardHeader className="py-4 border-b bg-slate-50/40">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span>Sample Compliance Trend</span>
+                  <span className="text-xs font-normal text-muted-foreground">Monthly Stat Check (Sample)</span>
+                </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 <MonthlyComplianceChart />
               </CardContent>
             </Card>

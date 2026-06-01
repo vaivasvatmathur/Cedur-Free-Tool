@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, FileDown, Filter, ShieldAlert, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ShieldAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,13 +36,6 @@ export function ComplianceDashboard() {
           <p className="mt-2 text-muted-foreground">EPF, EPS, ESI, Professional Tax, HRA, and tax-regime validation for Indian payroll data.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline"><Filter className="h-4 w-4" /> Filter</Button>
-          <Button variant="outline" asChild>
-            <Link href="/report">
-              <FileDown className="h-4 w-4" />
-              Export CSV
-            </Link>
-          </Button>
           <Button asChild>
             <Link href="/report">
               <Download className="h-4 w-4" />

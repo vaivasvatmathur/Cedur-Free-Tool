@@ -7,9 +7,14 @@ import type {
   PayrollRow,
   Severity
 } from "@/types/payroll";
+import { validateEPF } from "./validators/epf";
+import { validateEPS } from "./validators/eps";
+import { validateESI } from "./validators/esi";
+import { validatePT, expectedProfessionalTax } from "./validators/pt";
+import { validateHRA, calculateHraExemption } from "./validators/hra";
+import { validateTaxRegime } from "./validators/taxRegime";
 
 const round = (value: number) => Math.round(value);
-const nearlyEqual = (actual: number, expected: number) => Math.abs(actual - expected) <= 2;
 
 const REQUIRED_UPLOAD_COLUMNS = [
   "Employee ID",
@@ -35,30 +40,6 @@ export type ValidationOptions = {
   payrollMonth?: string;
 };
 
-function pushIssue(
-  issues: ComplianceIssue[],
-  row: PayrollRow,
-  category: ComplianceIssue["category"],
-  severity: Severity,
-  message: string,
-  expected?: number,
-  actual?: number
-) {
-  issues.push({
-    employeeId: row.employeeId,
-    employeeName: row.employeeName,
-    category,
-    severity,
-    message,
-    expected,
-    actual
-  });
-}
-
-function isFebruary(month?: string) {
-  return month?.trim().toLowerCase().startsWith("feb") ?? false;
-}
-
 export function validateRequiredColumns(headers: string[]) {
   const normalizedHeaders = new Set(headers.map(normalizeHeader));
   return requiredUploadColumns.filter((column) => !normalizedHeaders.has(normalizeHeader(column)));
@@ -68,41 +49,10 @@ export function normalizeHeader(header: string) {
   return header.toLowerCase().trim().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
-export function expectedProfessionalTax(state: string, monthlyGross: number, payrollMonth?: string) {
-  const normalizedState = state.trim().toLowerCase();
-
-  if (normalizedState === "delhi") return { amount: 0, supported: true };
-
-  if (normalizedState === "maharashtra") {
-    if (monthlyGross <= 7500) return { amount: 0, supported: true };
-    if (monthlyGross <= 10000) return { amount: 175, supported: true };
-    return { amount: isFebruary(payrollMonth) ? 300 : 200, supported: true };
-  }
-
-  if (normalizedState === "karnataka") {
-    return { amount: monthlyGross >= 25000 ? (isFebruary(payrollMonth) ? 300 : 200) : 0, supported: true };
-  }
-
-  if (normalizedState === "tamil nadu") {
-    const halfYearGross = monthlyGross * 6;
-    if (halfYearGross <= 21000) return { amount: 0, supported: true };
-    if (halfYearGross <= 30000) return { amount: round(180 / 6), supported: true };
-    if (halfYearGross <= 45000) return { amount: round(425 / 6), supported: true };
-    if (halfYearGross <= 60000) return { amount: round(930 / 6), supported: true };
-    if (halfYearGross <= 75000) return { amount: round(1025 / 6), supported: true };
-    return { amount: round(1250 / 6), supported: true };
-  }
-
-  return { amount: undefined, supported: false };
-}
-
-export function calculateHraExemption(row: PayrollRow) {
-  if (row.taxRegime === "New") return 0;
-  const annualSalaryForHra = (row.basicSalary + row.dearnessAllowance) * 12;
-  const actualAnnualHra = row.hraReceived * 12;
-  const locationLimit = annualSalaryForHra * (row.metroCity ? 0.5 : 0.4);
-  const rentMinusTenPercent = Math.max(0, row.annualRentPaid - annualSalaryForHra * 0.1);
-  return round(Math.min(actualAnnualHra, locationLimit, rentMinusTenPercent));
+function mapSeverity(sev: "critical" | "warning" | "info"): Severity {
+  if (sev === "critical") return "Critical";
+  if (sev === "warning") return "Warning";
+  return "Info";
 }
 
 export function validatePayroll(rows: PayrollRow[], options: ValidationOptions = {}): ComplianceResult {
@@ -111,7 +61,13 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
 
   for (const row of rows) {
     if (!row.employeeId || !row.employeeName || !row.state) {
-      pushIssue(issues, row, "Data Quality", "Critical", "Required employee identity or state fields are missing.");
+      issues.push({
+        employeeId: row.employeeId || "UNKNOWN",
+        employeeName: row.employeeName || "UNKNOWN",
+        category: "Data Quality",
+        severity: "Critical",
+        message: "Required employee identity or state fields are missing."
+      });
     }
 
     const pfWage = row.basicSalary + row.dearnessAllowance;
@@ -120,7 +76,7 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
     const expectedEmployerEps = round(Math.min(pfWage * 0.0833, 1250));
     const expectedEmployeeEsi = round(row.grossSalary * 0.0075);
     const expectedEmployerEsi = round(row.grossSalary * 0.0325);
-    const professionalTax = expectedProfessionalTax(row.state, row.grossSalary, options.payrollMonth);
+    const pt = expectedProfessionalTax(row.state, row.grossSalary, options.payrollMonth);
     const hraExemption = calculateHraExemption(row);
 
     findings.push({
@@ -132,49 +88,112 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       expectedEmployerEps,
       expectedEmployeeEsi: row.grossSalary <= 21000 ? expectedEmployeeEsi : 0,
       expectedEmployerEsi: row.grossSalary <= 21000 ? expectedEmployerEsi : 0,
-      expectedProfessionalTax: professionalTax.amount,
+      expectedProfessionalTax: pt.amount,
       hraExemption
     });
 
-    if (pfWage <= 15000 && row.employeeEpf === 0) {
-      pushIssue(issues, row, "EPF", "Critical", "PF is mandatory when Basic + DA is Rs. 15,000 or below, but employee EPF is missing.", expectedEmployeeEpf, row.employeeEpf);
-    }
-    if (!nearlyEqual(row.employeeEpf, expectedEmployeeEpf)) {
-      pushIssue(issues, row, "EPF", "Critical", "Employee EPF deduction must be 12% of Basic + DA.", expectedEmployeeEpf, row.employeeEpf);
-    }
-    if (pfWage > 15000) {
-      pushIssue(issues, row, "EPF", "Info", "PF contribution may be voluntary because Basic + DA exceeds Rs. 15,000.");
-    }
-
-    if (!nearlyEqual(row.employerEpf, expectedEmployerEpf)) {
-      pushIssue(issues, row, "EPF", "Warning", "Employer EPF contribution should be 3.67% of Basic + DA.", expectedEmployerEpf, row.employerEpf);
-    }
-
-    if (!nearlyEqual(row.employerEps, expectedEmployerEps)) {
-      pushIssue(issues, row, "EPS", "Critical", "Employer EPS contribution should be 8.33% of PF wage, capped at Rs. 1,250.", expectedEmployerEps, row.employerEps);
-    }
-
-    if (row.grossSalary <= 21000) {
-      if (row.employeeEsi === 0) {
-        pushIssue(issues, row, "ESI", "Critical", "Employee is ESI eligible, but ESI deduction is missing.", expectedEmployeeEsi, row.employeeEsi);
-      } else if (!nearlyEqual(row.employeeEsi, expectedEmployeeEsi)) {
-        pushIssue(issues, row, "ESI", "Warning", "Employee ESI deduction should be 0.75% of gross salary.", expectedEmployeeEsi, row.employeeEsi);
+    // Run EPF Validator
+    const epfResults = validateEPF(row);
+    epfResults.forEach((res) => {
+      let exp: number | undefined;
+      let act: number | undefined;
+      if (res.issue.includes("mandatory")) {
+        exp = expectedEmployeeEpf;
+        act = row.employeeEpf;
+      } else if (res.issue.includes("deduction must be 12%")) {
+        exp = expectedEmployeeEpf;
+        act = row.employeeEpf;
+      } else if (res.issue.includes("Employer EPF contribution should be 3.67%")) {
+        exp = expectedEmployerEpf;
+        act = row.employerEpf;
       }
-    } else {
-      pushIssue(issues, row, "ESI", "Info", "Employee exceeds ESI eligibility threshold.");
-    }
 
-    if (!professionalTax.supported) {
-      pushIssue(issues, row, "Professional Tax", "Info", "Professional Tax rules unavailable for selected state.");
-    } else if (professionalTax.amount !== undefined && !nearlyEqual(row.professionalTax, professionalTax.amount)) {
-      pushIssue(issues, row, "Professional Tax", "Warning", "Professional Tax deduction does not match the configured MVP state slab.", professionalTax.amount, row.professionalTax);
-    }
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "EPF",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: exp,
+        actual: act
+      });
+    });
 
-    if (row.taxRegime === "New") {
-      pushIssue(issues, row, "Tax Regime", "Warning", "HRA exemption benefits are not applicable under the New Tax Regime.", 0, hraExemption);
-    } else if (hraExemption > 0) {
-      pushIssue(issues, row, "HRA", "Info", `Eligible HRA exemption calculated as Rs. ${hraExemption.toLocaleString("en-IN")}.`, hraExemption);
-    }
+    // Run EPS Validator
+    const epsResults = validateEPS(row);
+    epsResults.forEach((res) => {
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "EPS",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: expectedEmployerEps,
+        actual: row.employerEps
+      });
+    });
+
+    // Run ESI Validator
+    const esiResults = validateESI(row);
+    esiResults.forEach((res) => {
+      let exp: number | undefined;
+      let act: number | undefined;
+      if (res.issue.includes("missing") || res.issue.includes("deduction should be 0.75%")) {
+        exp = expectedEmployeeEsi;
+        act = row.employeeEsi;
+      }
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "ESI",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: exp,
+        actual: act
+      });
+    });
+
+    // Run PT Validator
+    const ptResults = validatePT(row, options.payrollMonth);
+    ptResults.forEach((res) => {
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "Professional Tax",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: pt.amount,
+        actual: row.professionalTax
+      });
+    });
+
+    // Run HRA Validator
+    const hraResults = validateHRA(row);
+    hraResults.forEach((res) => {
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "HRA",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: hraExemption,
+        actual: hraExemption
+      });
+    });
+
+    // Run Tax Regime Validator
+    const regimeResults = validateTaxRegime(row);
+    regimeResults.forEach((res) => {
+      issues.push({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        category: "Tax Regime",
+        severity: mapSeverity(res.severity),
+        message: res.issue,
+        expected: 0,
+        actual: hraExemption
+      });
+    });
   }
 
   const byEmployee = new Map<string, ComplianceIssue[]>();

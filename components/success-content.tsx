@@ -27,7 +27,7 @@ export function SuccessContent() {
     const rows = savedRows ? (JSON.parse(savedRows) as PayrollRow[]) : samplePayrollRows;
     const companyInfo = savedCompany ? (JSON.parse(savedCompany) as CompanyInfo) : sampleCompanyInfo;
     if (savedContact) setContact(JSON.parse(savedContact) as Contact);
-    generateCompliancePdf(validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }));
+    generateCompliancePdf(validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }), companyInfo);
   }, []);
 
   return (

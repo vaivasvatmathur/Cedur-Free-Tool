@@ -23,9 +23,9 @@ export function ReportActions() {
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
-      <Button onClick={() => generateCompliancePdf(result)}>
+      <Button onClick={() => generateCompliancePdf(result, companyInfo)}>
         <Download className="h-4 w-4" />
-        Download Report Now
+        Download Report Again
       </Button>
       <Button variant="outline" onClick={() => downloadComplianceCsv(result)}>
         <FileDown className="h-4 w-4" />

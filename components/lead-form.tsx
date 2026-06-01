@@ -57,12 +57,20 @@ export function LeadForm() {
     await fetch("/api/lead", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values)
+      body: JSON.stringify({
+        email: values.email || null,
+        phone: values.phone || null
+      })
     });
     await fetch("/api/report-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: values.email, phone: values.phone, score: result.score, issueCount: result.issueCount })
+      body: JSON.stringify({
+        health_score: result.score,
+        critical_issues: result.criticalCount,
+        warnings: result.warningCount,
+        report_data: result
+      })
     });
     window.sessionStorage.setItem("cedur-report-contact", JSON.stringify(values));
     router.push("/success");

@@ -2,37 +2,43 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseServerClient } from "@/lib/supabase";
 
-const emptyToUndefined = (value: unknown) => (typeof value === "string" && value.trim() === "" ? undefined : value);
-
 const schema = z.object({
-  email: z.preprocess(emptyToUndefined, z.string().email().optional()),
-  phone: z.preprocess(emptyToUndefined, z.string().min(10).max(15).optional()),
-  score: z.number(),
-  issueCount: z.number()
+  health_score: z.number().int(),
+  critical_issues: z.number().int(),
+  warnings: z.number().int(),
+  report_data: z.any()
 });
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  try {
+    const body = await request.json();
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return NextResponse.json({ 
+        ok: true, 
+        mode: "local", 
+        message: "Supabase environment variables are not configured. Operating in simulated local mode." 
+      });
+    }
+
+    const { error } = await supabase.from("reports").insert({
+      health_score: parsed.data.health_score,
+      critical_issues: parsed.data.critical_issues,
+      warnings: parsed.data.warnings,
+      report_data: parsed.data.report_data
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Failed to log report metadata" }, { status: 500 });
   }
-
-  const supabase = getSupabaseServerClient();
-  if (!supabase) {
-    return NextResponse.json({ ok: true, mode: "local" });
-  }
-
-  const { error } = await supabase.from("reports").insert({
-    email: parsed.data.email ?? null,
-    phone: parsed.data.phone ?? null,
-    score: parsed.data.score,
-    issue_count: parsed.data.issueCount
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
 }

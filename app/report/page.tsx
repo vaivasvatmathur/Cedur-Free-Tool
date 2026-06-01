@@ -1,13 +1,27 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import { FileCheck2, LockKeyhole, MailCheck } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { LeadForm } from "@/components/lead-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ComplianceRing } from "@/components/compliance-ring";
-import { samplePayrollRows } from "@/lib/sample-data";
+import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
+import type { CompanyInfo, PayrollRow } from "@/types/payroll";
 
 export default function ReportPage() {
-  const result = validatePayroll(samplePayrollRows);
+  const [rows, setRows] = useState<PayrollRow[]>(samplePayrollRows);
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
+
+  useEffect(() => {
+    const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
+    const savedCompany = window.sessionStorage.getItem("cedur-company-info");
+    if (savedRows) setRows(JSON.parse(savedRows) as PayrollRow[]);
+    if (savedCompany) setCompanyInfo(JSON.parse(savedCompany) as CompanyInfo);
+  }, []);
+
+  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }), [rows, companyInfo.payrollMonth]);
 
   return (
     <main>
