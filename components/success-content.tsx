@@ -11,6 +11,7 @@ import { generateCompliancePdf } from "@/lib/report";
 import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
 import type { CompanyInfo, PayrollRow } from "@/types/payroll";
+import { useComplianceRules } from "@/hooks/use-compliance-rules";
 
 type Contact = {
   email?: string;
@@ -19,16 +20,20 @@ type Contact = {
 
 export function SuccessContent() {
   const [contact, setContact] = useState<Contact>({});
+  const { ruleMap, ptRules, isLoading } = useComplianceRules();
 
   useEffect(() => {
+    if (isLoading) return;
+
     const savedContact = window.sessionStorage.getItem("cedur-report-contact");
     const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
     const savedCompany = window.sessionStorage.getItem("cedur-company-info");
     const rows = savedRows ? (JSON.parse(savedRows) as PayrollRow[]) : samplePayrollRows;
     const companyInfo = savedCompany ? (JSON.parse(savedCompany) as CompanyInfo) : sampleCompanyInfo;
+
     if (savedContact) setContact(JSON.parse(savedContact) as Contact);
-    generateCompliancePdf(validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }), companyInfo);
-  }, []);
+    generateCompliancePdf(validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), companyInfo);
+  }, [isLoading, ptRules, ruleMap]);
 
   return (
     <section className="page-shell py-10">
@@ -40,7 +45,7 @@ export function SuccessContent() {
             </div>
             <h1 className="text-4xl font-bold tracking-normal">Your Payroll Compliance Report Is Ready</h1>
             <p className="mt-4 max-w-2xl text-muted-foreground">
-              Your report has been successfully prepared and sent to your provided contact details.
+              Your report has been successfully prepared and emailed to your provided work email.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               {contact.email && (
@@ -52,7 +57,7 @@ export function SuccessContent() {
               {contact.phone && (
                 <Badge variant="success" className="gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  Sent to WhatsApp
+                  WhatsApp Requested
                 </Badge>
               )}
             </div>

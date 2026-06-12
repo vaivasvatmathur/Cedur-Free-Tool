@@ -26,6 +26,7 @@ export type PayrollRow = {
   employerEpf: number;
   employerEps: number;
   employeeEsi: number;
+  employerEsi?: number;
   professionalTax: number;
   taxRegime: TaxRegime;
 };
@@ -85,4 +86,24 @@ export type UploadMetadata = {
   fileType: string;
   fileSize: number;
   storagePath?: string;
+};
+
+export type ComplianceRule = {
+  id?: string;
+  rule_key: string;
+  rule_value: string;
+  description: string;
+  effective_from?: string;
+  updated_at?: string;
+};
+
+export type ComplianceRuleMap = Record<string, string>;
+
+export type PTRule = {
+  id?: string;
+  state: SupportedState;
+  min_salary: number;
+  max_salary: number | null;
+  pt_amount: number;
+  updated_at?: string;
 };

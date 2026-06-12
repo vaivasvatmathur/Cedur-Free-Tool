@@ -26,6 +26,8 @@ const headerMap: Record<string, keyof PayrollRow> = {
   employer_eps: "employerEps",
   employee_esi_deduction: "employeeEsi",
   employee_esi: "employeeEsi",
+  employer_esi_contribution: "employerEsi",
+  employer_esi: "employerEsi",
   professional_tax_deduction: "professionalTax",
   professional_tax: "professionalTax",
   tax_regime: "taxRegime",
@@ -75,6 +77,7 @@ function coerceRows(rows: Record<string, unknown>[]): PayrollRow[] {
         employerEpf: toNumber(mapped.employerEpf),
         employerEps: toNumber(mapped.employerEps),
         employeeEsi: toNumber(mapped.employeeEsi),
+        employerEsi: mapped.employerEsi === undefined || mapped.employerEsi === "" ? undefined : toNumber(mapped.employerEsi),
         professionalTax: toNumber(mapped.professionalTax),
         taxRegime: toTaxRegime(mapped.taxRegime)
       };

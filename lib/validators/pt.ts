@@ -1,55 +1,96 @@
-import type { PayrollRow } from "@/types/payroll";
+import type { PayrollRow, PTRule } from "@/types/payroll";
 import type { ValidationResult } from "./types";
+import { defaultPTRules } from "@/lib/services/ruleService";
 
-function isFebruary(payrollMonth?: string) {
-  return payrollMonth?.trim().toLowerCase().startsWith("feb") ?? false;
-}
+const PT_APPLICABLE_STATES = new Set([
+  "andhra pradesh",
+  "assam",
+  "bihar",
+  "gujarat",
+  "jharkhand",
+  "karnataka",
+  "kerala",
+  "madhya pradesh",
+  "maharashtra",
+  "manipur",
+  "meghalaya",
+  "mizoram",
+  "nagaland",
+  "odisha",
+  "puducherry",
+  "punjab",
+  "sikkim",
+  "tamil nadu",
+  "telangana",
+  "tripura",
+  "west bengal"
+]);
 
-export function expectedProfessionalTax(state: string, monthlyGross: number, payrollMonth?: string) {
+const PT_NON_APPLICABLE_STATES = new Set([
+  "delhi",
+  "haryana",
+  "rajasthan",
+  "uttar pradesh",
+  "uttarakhand",
+  "himachal pradesh",
+  "goa",
+  "chandigarh",
+  "andaman and nicobar islands",
+  "lakshadweep",
+  "ladakh",
+  "jammu and kashmir"
+]);
+
+export function expectedProfessionalTax(state: string, monthlyGross: number, ptRules: PTRule[] = defaultPTRules) {
   const normalizedState = state.trim().toLowerCase();
-
-  if (normalizedState === "delhi") return { amount: 0, supported: true };
-
-  if (normalizedState === "maharashtra") {
-    if (monthlyGross <= 7500) return { amount: 0, supported: true };
-    if (monthlyGross <= 10000) return { amount: 175, supported: true };
-    return { amount: isFebruary(payrollMonth) ? 300 : 200, supported: true };
+  const nonApplicable = PT_NON_APPLICABLE_STATES.has(normalizedState);
+  if (nonApplicable) {
+    return {
+      amount: 0,
+      supported: false,
+      applicable: false,
+      nonApplicable
+    };
   }
 
-  if (normalizedState === "karnataka") {
-    return { amount: monthlyGross >= 25000 ? (isFebruary(payrollMonth) ? 300 : 200) : 0, supported: true };
-  }
-
-  if (normalizedState === "tamil nadu") {
-    const halfYearGross = monthlyGross * 6;
-    if (halfYearGross <= 21000) return { amount: 0, supported: true };
-    if (halfYearGross <= 30000) return { amount: Math.round(180 / 6), supported: true };
-    if (halfYearGross <= 45000) return { amount: Math.round(425 / 6), supported: true };
-    if (halfYearGross <= 60000) return { amount: Math.round(930 / 6), supported: true };
-    if (halfYearGross <= 75000) return { amount: Math.round(1025 / 6), supported: true };
-    return { amount: Math.round(1250 / 6), supported: true };
-  }
-
-  return { amount: undefined, supported: false };
+  const stateRules = ptRules.filter((rule) => rule.state.trim().toLowerCase() === normalizedState);
+  const matchingRule = stateRules.find((rule) => monthlyGross >= Number(rule.min_salary) && (rule.max_salary === null || monthlyGross <= Number(rule.max_salary)));
+  return {
+    amount: stateRules.length ? matchingRule?.pt_amount ?? 0 : undefined,
+    supported: stateRules.length > 0,
+    applicable: PT_APPLICABLE_STATES.has(normalizedState),
+    nonApplicable
+  };
 }
 
-export function validatePT(row: PayrollRow, payrollMonth?: string): ValidationResult[] {
+export function validatePT(row: PayrollRow, ptRules: PTRule[] = defaultPTRules): ValidationResult[] {
   const results: ValidationResult[] = [];
-  const pt = expectedProfessionalTax(row.state, row.grossSalary, payrollMonth);
+  const pt = expectedProfessionalTax(row.state, row.grossSalary, ptRules);
 
-  if (!pt.supported) {
-    results.push({
-      compliant: true,
-      severity: "info",
-      issue: "Professional Tax rules unavailable for selected state.",
-      recommendation: "PT slab details are only configured for MH, KA, TN, and DL. Verify manually if applicable."
-    });
-  } else if (pt.amount !== undefined && Math.abs(row.professionalTax - pt.amount) > 2) {
+  if (pt.supported && pt.amount !== undefined && Math.abs(row.professionalTax - pt.amount) > 2) {
     results.push({
       compliant: false,
       severity: "warning",
       issue: "Professional Tax deduction does not match the configured state slab.",
       recommendation: `Adjust Professional Tax to Rs. ${pt.amount.toLocaleString("en-IN")} based on the ${row.state} slab.`
+    });
+  } else if (!pt.supported && pt.nonApplicable) {
+    if (row.professionalTax > 2) {
+      results.push({
+        compliant: false,
+        severity: "warning",
+        issue: "Professional Tax deduction is present for a non-applicable state.",
+        recommendation: `Remove or review Professional Tax deduction because PT is not applicable in ${row.state}.`
+      });
+    }
+  } else if (!pt.supported) {
+    results.push({
+      compliant: true,
+      severity: "info",
+      issue: "Professional Tax validation is currently unavailable for the selected state.",
+      recommendation: pt.applicable
+        ? `Verify ${row.state} Professional Tax manually until the state slab is configured.`
+        : "Confirm Professional Tax applicability manually for the selected state."
     });
   }
 

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "clean:next": "node scripts/clean-next-cache.mjs",
+    "dev": "npm run clean:next && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -29,6 +30,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.1",
     "recharts": "^2.13.3",
+    "resend": "^6.12.4",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "xlsx": "^0.18.5",

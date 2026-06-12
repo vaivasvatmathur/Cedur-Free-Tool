@@ -9,10 +9,12 @@ import { ComplianceRing } from "@/components/compliance-ring";
 import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
 import type { CompanyInfo, PayrollRow } from "@/types/payroll";
+import { useComplianceRules } from "@/hooks/use-compliance-rules";
 
 export default function ReportPage() {
   const [rows, setRows] = useState<PayrollRow[]>(samplePayrollRows);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
+  const { ruleMap, ptRules } = useComplianceRules();
 
   useEffect(() => {
     const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
@@ -21,7 +23,7 @@ export default function ReportPage() {
     if (savedCompany) setCompanyInfo(JSON.parse(savedCompany) as CompanyInfo);
   }, []);
 
-  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }), [rows, companyInfo.payrollMonth]);
+  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [rows, companyInfo.payrollMonth, ruleMap, ptRules]);
 
   return (
     <main>

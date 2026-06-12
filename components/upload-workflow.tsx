@@ -3,17 +3,19 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Plus, ShieldCheck, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Loader2, Plus, RotateCcw, ShieldCheck, UploadCloud, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { parsePayrollFile } from "@/lib/file-parser";
 import { requiredUploadColumns, validatePayroll } from "@/lib/validation";
-import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
+import { sampleCompanyInfo } from "@/lib/sample-data";
 import type { CompanyInfo, PayrollRow, TaxRegime } from "@/types/payroll";
+import { useComplianceRules } from "@/hooks/use-compliance-rules";
 
 const blankEmployee = (state = "Maharashtra"): PayrollRow => ({
   employeeId: "",
@@ -42,18 +44,25 @@ function savePayrollSession(rows: PayrollRow[], companyInfo: CompanyInfo) {
 export function UploadWorkflow() {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
-  const [fileName, setFileName] = useState<string>("sample-payroll.csv");
-  const [rows, setRows] = useState<PayrollRow[]>(samplePayrollRows);
+  const [uploadState, setUploadState] = useState<"empty" | "uploaded">("empty");
+  const [fileName, setFileName] = useState<string>("");
+  const [rows, setRows] = useState<PayrollRow[]>([]);
   const [missingColumns, setMissingColumns] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
   const [isParsing, setIsParsing] = useState(false);
-  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth }), [rows, companyInfo.payrollMonth]);
+  const [uploadedAt, setUploadedAt] = useState<Date | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const { ruleMap, ptRules } = useComplianceRules();
+  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [rows, companyInfo.payrollMonth, ruleMap, ptRules]);
 
   async function handleFile(file?: File) {
     if (!file) return;
     setIsParsing(true);
     setMissingColumns([]);
     setFileName(file.name);
+    setRows([]);
+    setUploadState("empty");
+    setUploadedAt(null);
     setProgress(24);
     const formData = new FormData();
     formData.append("file", file);
@@ -63,8 +72,16 @@ export function UploadWorkflow() {
     if (parsed.missingColumns.length) {
       setRows([]);
       setMissingColumns(parsed.missingColumns);
+      setFileName("");
+      setUploadedAt(null);
+      setUploadState("empty");
+      setProgress(0);
+      setIsParsing(false);
+      return;
     } else {
       setRows(parsed.rows);
+      setUploadedAt(new Date());
+      setUploadState("uploaded");
       savePayrollSession(parsed.rows, companyInfo);
     }
     setTimeout(() => {
@@ -78,108 +95,195 @@ export function UploadWorkflow() {
     router.push("/dashboard");
   }
 
+  function resetUpload() {
+    setUploadState("empty");
+    setFileName("");
+    setRows([]);
+    setMissingColumns([]);
+    setProgress(0);
+    setIsParsing(false);
+    setUploadedAt(null);
+    setFileInputKey((key) => key + 1);
+  }
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+    <div className="grid gap-6">
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-gradient-to-br from-white to-cedur-50/70">
           <CardTitle>Upload Payroll File</CardTitle>
           <CardDescription>Validate EPF, EPS, ESI, PT, HRA, and tax-regime compliance from a CSV or XLSX file.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-          <label
-            htmlFor="payroll-file"
-            className="flex min-h-[300px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-cedur-200 bg-cedur-50/45 p-6 text-center transition hover:border-cedur-400 hover:bg-cedur-50"
-          >
-            <div className="rounded-2xl bg-white p-4 text-cedur-700 shadow-soft">
-              <UploadCloud className="h-9 w-9" />
-            </div>
-            <h2 className="mt-5 text-2xl font-bold">Drag and drop payroll file</h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">Supports .csv, .xlsx, and .xls with the statutory payroll columns listed below.</p>
-            <Button className="mt-5" type="button">Choose File</Button>
-            <input id="payroll-file" type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(event) => handleFile(event.target.files?.[0])} />
-          </label>
+          <AnimatePresence mode="wait">
+            {uploadState === "empty" ? (
+              <motion.div
+                key="empty-upload"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.22 }}
+              >
+                <label
+                  htmlFor="payroll-file"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleFile(event.dataTransfer.files?.[0]);
+                  }}
+                  className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-cedur-200 bg-cedur-50/45 p-6 text-center transition hover:border-cedur-400 hover:bg-cedur-50"
+                >
+                  <div className="rounded-2xl bg-white p-4 text-cedur-700 shadow-soft">
+                    <UploadCloud className="h-9 w-9" />
+                  </div>
+                  <h2 className="mt-5 text-2xl font-bold">Drag and drop payroll file</h2>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">Supports .csv, .xlsx, and .xls with the statutory payroll columns listed below.</p>
+                  <Button className="mt-5" type="button" disabled={isParsing}>{isParsing ? "Processing..." : "Choose File"}</Button>
+                  <input key={fileInputKey} id="payroll-file" type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(event) => handleFile(event.target.files?.[0])} />
+                </label>
 
-          {missingColumns.length > 0 && (
-            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <p className="font-semibold">Upload errors: missing required columns</p>
-              <p className="mt-2">{missingColumns.join(", ")}</p>
-            </div>
-          )}
+                {missingColumns.length > 0 && (
+                  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <p className="font-semibold">Upload errors: missing required columns</p>
+                    <p className="mt-2">{missingColumns.join(", ")}</p>
+                  </div>
+                )}
 
-          <div className="mt-5 rounded-2xl border bg-white p-4">
-            <p className="text-sm font-semibold">Required columns</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {requiredUploadColumns.map((column) => (
-                <Badge key={column} variant="outline">{column}</Badge>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border bg-white p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-emerald-50 p-3 text-emerald-700">
-                  <FileSpreadsheet className="h-5 w-5" />
+                <div className="mt-5 rounded-2xl border bg-white p-4">
+                  <p className="text-sm font-semibold">Required columns</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {requiredUploadColumns.map((column) => (
+                      <Badge key={column} variant="outline">{column}</Badge>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold">{fileName}</p>
-                  <p className="text-sm text-muted-foreground">{rows.length} employees ready for validation</p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="uploaded-success"
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                transition={{ duration: 0.24 }}
+                className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-sm"
+              >
+                <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                  <div className="flex gap-4">
+                    <div className="relative h-14 w-14 shrink-0">
+                      <motion.span
+                        className="absolute inset-0 rounded-full bg-emerald-300/40"
+                        animate={{ scale: [1, 1.22, 1], opacity: [0.55, 0.12, 0.55] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                      />
+                      <motion.div
+                        initial={{ scale: 0.72, rotate: -12 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ type: "spring", stiffness: 360, damping: 18 }}
+                        className="absolute inset-1 flex items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm"
+                      >
+                        <CheckCircle2 className="h-7 w-7" />
+                      </motion.div>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-normal text-emerald-950">File Uploaded Successfully</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">{fileName} is ready for compliance validation.</p>
+                    </div>
+                  </div>
+                  <Badge variant={result.criticalCount ? "warning" : "success"}>{result.score}% compliant</Badge>
                 </div>
-              </div>
-              <Badge variant={result.criticalCount ? "warning" : "success"}>{result.score}% compliant</Badge>
-            </div>
-            <AnimatePresence>
-              {(isParsing || progress > 0) && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-4">
-                  <Progress value={progress} />
-                  <p className="mt-2 text-xs text-muted-foreground">{isParsing ? "Checking required columns and statutory payroll rules..." : "Validation complete"}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Button onClick={proceedToDashboard} className="sm:w-auto" disabled={!rows.length || missingColumns.length > 0}>View Compliance Dashboard</Button>
-            <Button variant="outline" onClick={() => router.push("/report")} className="sm:w-auto">Get Detailed Report</Button>
-          </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <UploadMetaItem label="File Name" value={fileName} />
+                  <UploadMetaItem label="Employees Detected" value={`${rows.length} employee${rows.length === 1 ? "" : "s"}`} icon={<Users className="h-4 w-4" />} />
+                  <UploadMetaItem label="Upload Timestamp" value={uploadedAt ? uploadedAt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Uploaded just now"} icon={<Clock3 className="h-4 w-4" />} />
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <Button onClick={proceedToDashboard} className="sm:w-auto" disabled={!rows.length || missingColumns.length > 0}>View Compliance Dashboard</Button>
+                  <Button variant="outline" onClick={resetUpload} className="sm:w-auto">
+                    <RotateCcw className="h-4 w-4" />
+                    Upload Another File
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {(isParsing || progress > 0) && uploadState === "empty" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-5">
+                <Progress value={progress} />
+                <p className="mt-2 text-xs text-muted-foreground">{isParsing ? "Checking required columns and statutory payroll rules..." : "Validation complete"}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
 
-      <div className="space-y-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-5 w-5 text-cedur-700" />
-              Validation Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[
-              ["EPF scan", result.issues.some((issue) => issue.category === "EPF")],
-              ["EPS scan", result.issues.some((issue) => issue.category === "EPS")],
-              ["ESI scan", result.issues.some((issue) => issue.category === "ESI")],
-              ["PT and HRA scan", result.issues.some((issue) => ["Professional Tax", "HRA", "Tax Regime"].includes(issue.category))]
-            ].map(([label, hasIssue]) => (
-              <div key={String(label)} className="flex items-center justify-between rounded-xl bg-muted/60 p-3">
-                <span className="text-sm font-medium">{label}</span>
-                {hasIssue ? <AlertTriangle className="h-4 w-4 text-amber-600" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-5 w-5 text-cedur-700" />
+            Validation Status
+          </CardTitle>
+          <CardDescription>Compliance scan progress for the selected payroll file.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          {[
+            ["EPF Scan", ["EPF"]],
+            ["EPS Scan", ["EPS"]],
+            ["ESI Scan", ["ESI"]],
+            ["PT & HRA Scan", ["Professional Tax", "HRA", "Tax Regime"]]
+          ].map(([label, categories]) => {
+            const status = getScanStatus(categories as string[], result.issues, uploadState, isParsing);
+            return <ValidationStatusItem key={String(label)} label={String(label)} status={status} />;
+          })}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Statutory Rules</CardTitle>
-            <CardDescription>Deterministic validation for Indian payroll compliance.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <RuleCard title="EPF + EPS" copy="Employee EPF is 12% of Basic + DA. Employer EPF is 3.67%; EPS is 8.33% capped at Rs. 1,250." />
-            <RuleCard title="ESI" copy="Gross salary up to Rs. 21,000 requires employee ESI at 0.75%." />
-            <RuleCard title="PT + HRA" copy="PT supports Maharashtra, Karnataka, Tamil Nadu, and Delhi. HRA exemption applies only under Old Regime." />
-          </CardContent>
-        </Card>
+type ScanStatus = "Pending" | "Processing" | "Passed" | "Warning" | "Failed";
+
+function getScanStatus(categories: string[], issues: ReturnType<typeof validatePayroll>["issues"], uploadState: "empty" | "uploaded", isParsing: boolean): ScanStatus {
+  if (isParsing) return "Processing";
+  if (uploadState === "empty") return "Pending";
+  const scanIssues = issues.filter((issue) => categories.includes(issue.category));
+  if (scanIssues.some((issue) => issue.severity === "Critical")) return "Failed";
+  if (scanIssues.some((issue) => issue.severity === "Warning")) return "Warning";
+  return "Passed";
+}
+
+function UploadMetaItem({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-emerald-100 bg-white/80 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">{label}</p>
+      <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+        {icon ? <span className="text-emerald-700">{icon}</span> : null}
+        <span className="min-w-0 truncate">{value}</span>
       </div>
+    </div>
+  );
+}
+
+function ValidationStatusItem({ label, status }: { label: string; status: ScanStatus }) {
+  const styles: Record<ScanStatus, { wrapper: string; icon: string; badge: "default" | "success" | "warning" | "destructive" | "outline" }> = {
+    Pending: { wrapper: "bg-muted/50 text-muted-foreground", icon: "text-muted-foreground", badge: "outline" },
+    Processing: { wrapper: "bg-blue-50 text-blue-800", icon: "text-blue-700", badge: "default" },
+    Passed: { wrapper: "bg-emerald-50 text-emerald-900", icon: "text-emerald-700", badge: "success" },
+    Warning: { wrapper: "bg-amber-50 text-amber-900", icon: "text-amber-700", badge: "warning" },
+    Failed: { wrapper: "bg-red-50 text-red-900", icon: "text-red-700", badge: "destructive" }
+  };
+
+  const Icon = status === "Processing" ? Loader2 : status === "Failed" || status === "Warning" ? AlertTriangle : CheckCircle2;
+
+  return (
+    <div className={cn("flex items-center justify-between rounded-xl border border-border/60 p-4", styles[status].wrapper)}>
+      <div className="flex items-center gap-3">
+        <Icon className={cn("h-5 w-5", styles[status].icon, status === "Processing" && "animate-spin")} />
+        <span className="text-sm font-semibold">{label}</span>
+      </div>
+      <Badge variant={styles[status].badge}>{status}</Badge>
     </div>
   );
 }
@@ -188,7 +292,8 @@ export function ManualEntryWorkflow() {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
   const [manualRows, setManualRows] = useState<PayrollRow[]>([blankEmployee(sampleCompanyInfo.state)]);
-  const result = useMemo(() => validatePayroll(manualRows, { payrollMonth: companyInfo.payrollMonth }), [manualRows, companyInfo.payrollMonth]);
+  const { ruleMap, ptRules } = useComplianceRules();
+  const result = useMemo(() => validatePayroll(manualRows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [manualRows, companyInfo.payrollMonth, ruleMap, ptRules]);
 
   function updateManualRow(index: number, patch: Partial<PayrollRow>) {
     setManualRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));

@@ -13,6 +13,8 @@ import { validateESI } from "./validators/esi";
 import { validatePT, expectedProfessionalTax } from "./validators/pt";
 import { validateHRA, calculateHraExemption } from "./validators/hra";
 import { validateTaxRegime } from "./validators/taxRegime";
+import { getCachedPTRules, getCachedRuleMap, getRuleNumber, percentRule } from "@/lib/services/ruleService";
+import type { ComplianceRuleMap, PTRule } from "@/types/payroll";
 
 const round = (value: number) => Math.round(value);
 
@@ -38,6 +40,8 @@ export const requiredUploadColumns = [...REQUIRED_UPLOAD_COLUMNS];
 
 export type ValidationOptions = {
   payrollMonth?: string;
+  rules?: ComplianceRuleMap;
+  ptRules?: PTRule[];
 };
 
 export function validateRequiredColumns(headers: string[]) {
@@ -58,6 +62,8 @@ function mapSeverity(sev: "critical" | "warning" | "info"): Severity {
 export function validatePayroll(rows: PayrollRow[], options: ValidationOptions = {}): ComplianceResult {
   const issues: ComplianceIssue[] = [];
   const findings: EmployeeFinding[] = [];
+  const rules = options.rules ?? getCachedRuleMap();
+  const ptRules = options.ptRules ?? getCachedPTRules();
 
   for (const row of rows) {
     if (!row.employeeId || !row.employeeName || !row.state) {
@@ -71,13 +77,15 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
     }
 
     const pfWage = row.basicSalary + row.dearnessAllowance;
-    const expectedEmployeeEpf = round(pfWage * 0.12);
-    const expectedEmployerEpf = round(pfWage * 0.0367);
-    const expectedEmployerEps = round(Math.min(pfWage * 0.0833, 1250));
-    const expectedEmployeeEsi = round(row.grossSalary * 0.0075);
-    const expectedEmployerEsi = round(row.grossSalary * 0.0325);
-    const pt = expectedProfessionalTax(row.state, row.grossSalary, options.payrollMonth);
-    const hraExemption = calculateHraExemption(row);
+    const esiThreshold = getRuleNumber(rules, "ESI_THRESHOLD");
+    const epsMaxAmount = getRuleNumber(rules, "EPS_MAX_AMOUNT");
+    const expectedEmployeeEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYEE_RATE"));
+    const expectedEmployerEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYER_RATE"));
+    const expectedEmployerEps = round(Math.min(pfWage * percentRule(rules, "EPS_RATE"), epsMaxAmount));
+    const expectedEmployeeEsi = round(row.grossSalary * percentRule(rules, "ESI_EMPLOYEE_RATE"));
+    const expectedEmployerEsi = round(row.grossSalary * percentRule(rules, "ESI_EMPLOYER_RATE"));
+    const pt = expectedProfessionalTax(row.state, row.grossSalary, ptRules);
+    const hraExemption = calculateHraExemption(row, rules);
 
     findings.push({
       employeeId: row.employeeId,
@@ -86,24 +94,23 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       expectedEmployeeEpf,
       expectedEmployerEpf,
       expectedEmployerEps,
-      expectedEmployeeEsi: row.grossSalary <= 21000 ? expectedEmployeeEsi : 0,
-      expectedEmployerEsi: row.grossSalary <= 21000 ? expectedEmployerEsi : 0,
+      expectedEmployeeEsi: row.grossSalary <= esiThreshold ? expectedEmployeeEsi : 0,
+      expectedEmployerEsi: row.grossSalary <= esiThreshold ? expectedEmployerEsi : 0,
       expectedProfessionalTax: pt.amount,
       hraExemption
     });
 
-    // Run EPF Validator
-    const epfResults = validateEPF(row);
+    const epfResults = validateEPF(row, rules);
     epfResults.forEach((res) => {
       let exp: number | undefined;
       let act: number | undefined;
       if (res.issue.includes("mandatory")) {
         exp = expectedEmployeeEpf;
         act = row.employeeEpf;
-      } else if (res.issue.includes("deduction must be 12%")) {
+      } else if (res.issue.includes("Employee EPF deduction")) {
         exp = expectedEmployeeEpf;
         act = row.employeeEpf;
-      } else if (res.issue.includes("Employer EPF contribution should be 3.67%")) {
+      } else if (res.issue.includes("Employer EPF contribution")) {
         exp = expectedEmployerEpf;
         act = row.employerEpf;
       }
@@ -119,8 +126,7 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     });
 
-    // Run EPS Validator
-    const epsResults = validateEPS(row);
+    const epsResults = validateEPS(row, rules);
     epsResults.forEach((res) => {
       issues.push({
         employeeId: row.employeeId,
@@ -133,14 +139,16 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     });
 
-    // Run ESI Validator
-    const esiResults = validateESI(row);
+    const esiResults = validateESI(row, rules);
     esiResults.forEach((res) => {
       let exp: number | undefined;
       let act: number | undefined;
-      if (res.issue.includes("missing") || res.issue.includes("deduction should be 0.75%")) {
+      if (res.issue.includes("missing") || res.issue.includes("Employee ESI deduction")) {
         exp = expectedEmployeeEsi;
         act = row.employeeEsi;
+      } else if (res.issue.includes("Employer ESI contribution")) {
+        exp = expectedEmployerEsi;
+        act = row.employerEsi;
       }
       issues.push({
         employeeId: row.employeeId,
@@ -153,8 +161,7 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     });
 
-    // Run PT Validator
-    const ptResults = validatePT(row, options.payrollMonth);
+    const ptResults = validatePT(row, ptRules);
     ptResults.forEach((res) => {
       issues.push({
         employeeId: row.employeeId,
@@ -167,8 +174,7 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     });
 
-    // Run HRA Validator
-    const hraResults = validateHRA(row);
+    const hraResults = validateHRA(row, rules);
     hraResults.forEach((res) => {
       issues.push({
         employeeId: row.employeeId,
@@ -181,7 +187,6 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     });
 
-    // Run Tax Regime Validator
     const regimeResults = validateTaxRegime(row);
     regimeResults.forEach((res) => {
       issues.push({
@@ -235,11 +240,11 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
     issues,
     employeeLogs,
     findings,
-    recommendations: buildRecommendations(issues)
+    recommendations: buildRecommendations(issues, rules)
   };
 }
 
-function buildRecommendations(issues: ComplianceIssue[]) {
+function buildRecommendations(issues: ComplianceIssue[], rules: ComplianceRuleMap) {
   const recommendations: string[] = [];
   const count = (category: ComplianceIssue["category"], severity?: Severity) =>
     issues.filter((issue) => issue.category === category && (!severity || issue.severity === severity)).length;
@@ -251,9 +256,9 @@ function buildRecommendations(issues: ComplianceIssue[]) {
   const ptIssues = count("Professional Tax", "Warning");
 
   if (epfIssues) recommendations.push(`Update employee EPF contribution for ${epfIssues} detected critical EPF issue${epfIssues > 1 ? "s" : ""}.`);
-  if (epsIssues) recommendations.push(`Review employer EPS allocation for ${epsIssues} employee${epsIssues > 1 ? "s" : ""}; EPS is capped at Rs. 1,250.`);
+  if (epsIssues) recommendations.push(`Review employer EPS allocation for ${epsIssues} employee${epsIssues > 1 ? "s" : ""}; EPS is capped at Rs. ${getRuleNumber(rules, "EPS_MAX_AMOUNT").toLocaleString("en-IN")}.`);
   if (esiMissing) recommendations.push(`${esiMissing} employee${esiMissing > 1 ? "s are" : " is"} eligible for ESI but no deduction was found.`);
-  if (ptIssues) recommendations.push(`Recheck Professional Tax slabs for ${ptIssues} employee${ptIssues > 1 ? "s" : ""} in supported MVP states.`);
+  if (ptIssues) recommendations.push(`Recheck Professional Tax slabs for ${ptIssues} employee${ptIssues > 1 ? "s" : ""} in supported states.`);
   if (hraIssues) recommendations.push("Review HRA structure under the selected tax regime before issuing tax declarations.");
   if (!recommendations.length) recommendations.push("Payroll compliance looks healthy. Continue monthly validation before processing payroll.");
 

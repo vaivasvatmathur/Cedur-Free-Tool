@@ -1,17 +1,21 @@
 import type { PayrollRow } from "@/types/payroll";
 import type { ValidationResult } from "./types";
+import { getRuleNumber, percentRule } from "@/lib/services/ruleService";
+import type { ComplianceRuleMap } from "@/types/payroll";
 
-export function validateEPS(row: PayrollRow): ValidationResult[] {
+export function validateEPS(row: PayrollRow, rules?: ComplianceRuleMap): ValidationResult[] {
   const results: ValidationResult[] = [];
   const pfWage = row.basicSalary + row.dearnessAllowance;
-  const expectedEmployerEps = Math.round(Math.min(pfWage * 0.0833, 1250));
+  const epsRate = getRuleNumber(rules, "EPS_RATE");
+  const epsMaxAmount = getRuleNumber(rules, "EPS_MAX_AMOUNT");
+  const expectedEmployerEps = Math.round(Math.min(pfWage * percentRule(rules, "EPS_RATE"), epsMaxAmount));
 
   if (Math.abs(row.employerEps - expectedEmployerEps) > 2) {
     results.push({
       compliant: false,
       severity: "critical",
-      issue: "Employer EPS contribution should be 8.33% of PF wage, capped at Rs. 1,250.",
-      recommendation: `Adjust employer EPS contribution to Rs. ${expectedEmployerEps.toLocaleString("en-IN")} (8.33% of PF wage capped at Rs. 1,250).`
+      issue: `Employer EPS contribution should be ${epsRate}% of PF wage, capped at Rs. ${epsMaxAmount.toLocaleString("en-IN")}.`,
+      recommendation: `Adjust employer EPS contribution to Rs. ${expectedEmployerEps.toLocaleString("en-IN")} (${epsRate}% of PF wage capped at Rs. ${epsMaxAmount.toLocaleString("en-IN")}).`
     });
   }
 
