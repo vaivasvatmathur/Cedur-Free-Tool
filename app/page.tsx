@@ -8,10 +8,10 @@ import { ComplianceRing } from "@/components/compliance-ring";
 import { MonthlyComplianceChart } from "@/components/insights-chart";
 export default function LandingPage() {
   return (
-    <main>
+    <main className="home-hero-gradient min-h-screen">
       <Navbar />
-      <section className="home-hero-gradient border-b">
-        <div className="page-shell grid min-h-[680px] gap-10 py-12 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-16">
+      <section className="border-b">
+        <div className="page-shell grid gap-10 pb-12 pt-8 lg:grid-cols-[1.02fr_0.98fr] lg:items-start lg:pb-16 lg:pt-10">
           <div>
             <Badge className="mb-5">Free payroll compliance checker</Badge>
             <h1 className="font-gilroy-extrabold max-w-3xl text-4xl tracking-normal text-slate-950 sm:text-5xl lg:text-6xl">

@@ -28,7 +28,7 @@ export function ReportActions() {
       <Button
         size="lg"
         className="shadow-[0_14px_28px_rgba(131,94,245,0.24)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(131,94,245,0.3)]"
-        onClick={() => generateCompliancePdf(result, companyInfo)}
+        onClick={() => void generateCompliancePdf(result, companyInfo)}
       >
         <Download className="h-4 w-4" />
         Download Report

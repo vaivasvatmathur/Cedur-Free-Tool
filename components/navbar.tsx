@@ -18,7 +18,7 @@ export function Navbar() {
   const visibleNavItems = isHome ? navItems.filter((item) => item.href !== "/upload") : navItems;
 
   return (
-    <header className="sticky top-0 z-40 bg-transparent px-4 py-4 sm:px-6 lg:py-6">
+    <header className={`sticky top-0 z-40 bg-transparent px-4 sm:px-6 ${isHome ? "pb-2 pt-3 lg:pb-3 lg:pt-4" : "py-4 lg:py-6"}`}>
       <div className="mx-auto flex h-[74px] w-full max-w-[1320px] items-center justify-between rounded-full bg-white px-5 shadow-[0_22px_55px_rgba(41,86,128,0.16)] sm:h-[86px] sm:px-8">
         <Link href="/" className="flex min-w-0 items-center">
           <Image

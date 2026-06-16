@@ -12,29 +12,26 @@ import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
 import type { CompanyInfo, PayrollRow } from "@/types/payroll";
 import { useComplianceRules } from "@/hooks/use-compliance-rules";
-
 type Contact = {
   email?: string;
   phone?: string;
 };
-
 export function SuccessContent() {
   const [contact, setContact] = useState<Contact>({});
   const { ruleMap, ptRules, isLoading } = useComplianceRules();
-
   useEffect(() => {
     if (isLoading) return;
-
     const savedContact = window.sessionStorage.getItem("cedur-report-contact");
     const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
     const savedCompany = window.sessionStorage.getItem("cedur-company-info");
     const rows = savedRows ? (JSON.parse(savedRows) as PayrollRow[]) : samplePayrollRows;
     const companyInfo = savedCompany ? (JSON.parse(savedCompany) as CompanyInfo) : sampleCompanyInfo;
-
     if (savedContact) setContact(JSON.parse(savedContact) as Contact);
-    generateCompliancePdf(validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), companyInfo);
+    void generateCompliancePdf(
+      validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }),
+      companyInfo
+    );
   }, [isLoading, ptRules, ruleMap]);
-
   return (
     <section className="page-shell py-10">
       <Card className="overflow-hidden">
