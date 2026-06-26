@@ -49,7 +49,7 @@ export function validateESI(row: PayrollRow, rules?: ComplianceRuleMap): Validat
     results.push({
       compliant: true,
       severity: "info",
-      issue: "Employee exceeds ESI eligibility threshold.",
+      issue: "ESI eligibility may continue during an active contribution period. Manual verification recommended.",
       recommendation: `ESI contribution is not required as gross monthly salary exceeds Rs. ${esiThreshold.toLocaleString("en-IN")}.`
     });
   }

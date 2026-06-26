@@ -145,3 +145,43 @@ where not exists (select 1 from public.pt_rules where lower(state) = 'tamil nadu
 insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
 select 'Tamil Nadu', 12500.01, null, 208
 where not exists (select 1 from public.pt_rules where lower(state) = 'tamil nadu' and min_salary = 12500.01);
+
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Andhra Pradesh', 0, 15000, 0
+where not exists (select 1 from public.pt_rules where lower(state) = 'andhra pradesh');
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Andhra Pradesh', 15000.01, 20000, 150
+where not exists (select 1 from public.pt_rules where lower(state) = 'andhra pradesh' and min_salary = 15000.01);
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Andhra Pradesh', 20000.01, null, 200
+where not exists (select 1 from public.pt_rules where lower(state) = 'andhra pradesh' and min_salary = 20000.01);
+
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Assam', 0, 15000, 0
+where not exists (select 1 from public.pt_rules where lower(state) = 'assam');
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Assam', 15000.01, 25000, 180
+where not exists (select 1 from public.pt_rules where lower(state) = 'assam' and min_salary = 15000.01);
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Assam', 25000.01, null, 208
+where not exists (select 1 from public.pt_rules where lower(state) = 'assam' and min_salary = 25000.01);
+
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Bihar', 0, 25000, 0
+where not exists (select 1 from public.pt_rules where lower(state) = 'bihar');
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Bihar', 25000.01, 41666.67, 83.33
+where not exists (select 1 from public.pt_rules where lower(state) = 'bihar' and min_salary = 25000.01);
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Bihar', 41666.68, 83333.33, 166.67
+where not exists (select 1 from public.pt_rules where lower(state) = 'bihar' and min_salary = 41666.68);
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Bihar', 83333.34, null, 208.33
+where not exists (select 1 from public.pt_rules where lower(state) = 'bihar' and min_salary = 83333.34);
+
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Gujarat', 0, 11999.99, 0
+where not exists (select 1 from public.pt_rules where lower(state) = 'gujarat');
+insert into public.pt_rules (state, min_salary, max_salary, pt_amount)
+select 'Gujarat', 12000, null, 200
+where not exists (select 1 from public.pt_rules where lower(state) = 'gujarat' and min_salary = 12000);

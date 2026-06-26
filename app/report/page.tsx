@@ -6,24 +6,52 @@ import { Navbar } from "@/components/navbar";
 import { LeadForm } from "@/components/lead-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ComplianceRing } from "@/components/compliance-ring";
-import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
+import { EmptyState } from "@/components/empty-state";
+import { sampleCompanyInfo } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
 import type { CompanyInfo, PayrollRow } from "@/types/payroll";
-import { useComplianceRules } from "@/hooks/use-compliance-rules";
 
 export default function ReportPage() {
-  const [rows, setRows] = useState<PayrollRow[]>(samplePayrollRows);
+  const [rows, setRows] = useState<PayrollRow[]>([]);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
-  const { ruleMap, ptRules } = useComplianceRules();
+  const [hasData, setHasData] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
     const savedCompany = window.sessionStorage.getItem("cedur-company-info");
-    if (savedRows) setRows(JSON.parse(savedRows) as PayrollRow[]);
+    if (savedRows && JSON.parse(savedRows).length > 0) {
+      setRows(JSON.parse(savedRows) as PayrollRow[]);
+      setHasData(true);
+    }
     if (savedCompany) setCompanyInfo(JSON.parse(savedCompany) as CompanyInfo);
+    setLoading(false);
   }, []);
 
-  const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [rows, companyInfo.payrollMonth, ruleMap, ptRules]);
+  const result = useMemo(() => {
+    if (!rows.length) return null;
+    return validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth });
+  }, [rows, companyInfo.payrollMonth]);
+
+  if (loading) {
+    return (
+      <main>
+        <Navbar />
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-cedur-200 border-t-cedur-700" />
+        </div>
+      </main>
+    );
+  }
+
+  if (!hasData || !result) {
+    return (
+      <main>
+        <Navbar />
+        <EmptyState />
+      </main>
+    );
+  }
 
   return (
     <main>

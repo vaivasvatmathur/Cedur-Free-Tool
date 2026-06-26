@@ -15,13 +15,14 @@ const brand = {
   blue: [59, 130, 246] as const
 };
 
-const FINDING_SECTIONS: Array<[string, ComplianceCategory]> = [
-  ["EPF Findings", "EPF"],
-  ["EPS Findings", "EPS"],
-  ["ESI Findings", "ESI"],
-  ["PT Findings", "Professional Tax"],
-  ["HRA Findings", "HRA"],
-  ["Tax Regime Findings", "Tax Regime"]
+const FINDING_SECTIONS: Array<{ title: string; category: ComplianceCategory; checkType?: string }> = [
+  { title: "EPF Findings - Employee EPF Compliance", category: "EPF", checkType: "Employee EPF" },
+  { title: "EPF Findings - Employer EPF Compliance", category: "EPF", checkType: "Employer EPF" },
+  { title: "EPS Findings - Employer EPS Compliance", category: "EPS", checkType: "Employer EPS" },
+  { title: "ESI Findings", category: "ESI" },
+  { title: "PT Findings", category: "Professional Tax" },
+  { title: "HRA Findings", category: "HRA" },
+  { title: "Tax Regime Findings", category: "Tax Regime" }
 ];
 
 export type RenderCompliancePdfOptions = {
@@ -50,16 +51,17 @@ function severityColor(severity: Severity) {
 }
 
 function scoreColor(score: number) {
-  if (score < 70) return brand.red;
-  if (score < 90) return brand.amber;
-  return brand.green;
+  if (score >= 90) return brand.green;
+  if (score >= 75) return brand.blue;
+  if (score >= 50) return brand.amber;
+  return brand.red;
 }
 
 function riskLabel(score: number) {
-  if (score < 50) return "High Risk";
-  if (score < 70) return "Medium Risk";
-  if (score < 90) return "Review Recommended";
-  return "Good Standing";
+  if (score >= 90) return "Excellent";
+  if (score >= 75) return "Good";
+  if (score >= 50) return "Needs Review";
+  return "High Risk";
 }
 
 function formatGeneratedDate(date: Date) {
@@ -78,7 +80,7 @@ function getMostCommonIssues(issues: ComplianceIssue[], limit = 5) {
 }
 
 function categoryIssues(result: ComplianceResult, category: ComplianceCategory) {
-  return result.issues.filter((issue) => issue.category === category);
+  return result.issues.filter((issue) => issue.category === category && issue.severity !== "Info");
 }
 
 export function renderCompliancePdf({
@@ -182,8 +184,12 @@ export function renderCompliancePdf({
   }
 
   function drawSeverityBadge(x: number, baseline: number, severity: Severity) {
-    const color = severityColor(severity);
-    const label = severity;
+    const label = severity === "Info" ? "Observation" : severity;
+    let color: readonly number[] = severityColor(severity);
+    if (severity === "Info") {
+      color = [71, 85, 105]; // soft neutral blue/gray (slate-600)
+    }
+    
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     const badgeWidth = doc.getTextWidth(label) + 6;
@@ -191,9 +197,9 @@ export function renderCompliancePdf({
     const badgeY = baseline - 3.6;
 
     setFillColor(doc, [
-      Math.min(255, Math.round(color[0] + (255 - color[0]) * 0.82)),
-      Math.min(255, Math.round(color[1] + (255 - color[1]) * 0.82)),
-      Math.min(255, Math.round(color[2] + (255 - color[2]) * 0.82))
+      Math.min(255, Math.round(color[0] + (255 - color[0]) * 0.85)),
+      Math.min(255, Math.round(color[1] + (255 - color[1]) * 0.85)),
+      Math.min(255, Math.round(color[2] + (255 - color[2]) * 0.85))
     ]);
     doc.roundedRect(x, badgeY, badgeWidth, badgeHeight, 1, 1, "F");
     setTextColor(doc, color);
@@ -263,9 +269,9 @@ export function renderCompliancePdf({
 
     const stats: Array<{ label: string; value: string; color: readonly number[] }> = [
       { label: "Employees Audited", value: String(result.totalEmployees), color: brand.slate700 },
-      { label: "Critical Issues", value: String(result.criticalCount), color: brand.red },
-      { label: "Warnings", value: String(result.warningCount), color: brand.amber },
-      { label: "Informational Notes", value: String(result.infoCount), color: brand.blue }
+      { label: "Critical Employees", value: String(result.criticalCount), color: brand.red },
+      { label: "Employees Requiring Review", value: String(result.warningCount), color: brand.amber },
+      { label: "Fully Compliant Employees", value: String(result.compliantEmployees), color: brand.green }
     ];
 
     let statY = cardTop + 10;
@@ -316,6 +322,20 @@ export function renderCompliancePdf({
 
     beginTable();
 
+    if (title.toLowerCase().includes("pt") || title.toLowerCase().includes("professional tax")) {
+      const disclaimerLines = doc.splitTextToSize(
+        "Professional Tax rules vary by state and may change periodically. Results are based on configured state rules.",
+        contentWidth
+      );
+      const disclaimerHeight = disclaimerLines.length * 4.2;
+      ensureSpace(disclaimerHeight);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      setTextColor(doc, brand.slate500);
+      doc.text(disclaimerLines, margin, y);
+      y += disclaimerHeight + 2;
+    }
+
     if (!issues.length) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
@@ -342,7 +362,11 @@ export function renderCompliancePdf({
     drawHeader();
 
     issues.forEach((issue, index) => {
-      const observationLines = doc.splitTextToSize(issue.message, columns[3].width - 2);
+      let displayMessage = issue.message;
+      if (displayMessage === "Contribution follows statutory PF wage ceiling.") {
+        displayMessage = "Contribution follows statutory PF wage ceiling method and is compliant.";
+      }
+      const observationLines = doc.splitTextToSize(displayMessage, columns[3].width - 2);
       const rowHeight = Math.max(7, observationLines.length * 4.2 + 2);
 
       if (y + rowHeight > contentBottom) {
@@ -384,7 +408,7 @@ export function renderCompliancePdf({
     setTextColor(doc, brand.slate700);
 
     result.recommendations.forEach((recommendation, index) => {
-      const lines = doc.splitTextToSize(`${index + 1}. ${recommendation}`, contentWidth - 6);
+      const lines = doc.splitTextToSize(recommendation, contentWidth - 6);
       const blockHeight = lines.length * 4.5 + 2;
       ensureSpace(blockHeight);
       doc.setFont("helvetica", "bold");
@@ -435,9 +459,9 @@ export function renderCompliancePdf({
     };
 
     writeLine("Total Employees Audited:", String(result.totalEmployees));
-    writeLine("Critical Issues:", String(result.criticalCount), brand.red);
-    writeLine("Warnings:", String(result.warningCount), brand.amber);
-    writeLine("Informational Findings:", String(result.infoCount), brand.blue);
+    writeLine("Critical Employees:", String(result.criticalCount), brand.red);
+    writeLine("Employees Requiring Review:", String(result.warningCount), brand.amber);
+    writeLine("Fully Compliant Employees:", String(result.compliantEmployees), brand.green);
 
     lineY += 1;
     doc.setFont("helvetica", "bold");
@@ -477,8 +501,12 @@ export function renderCompliancePdf({
   drawCompanyInformation();
   drawHealthScore();
 
-  FINDING_SECTIONS.forEach(([title, category]) => {
-    drawFindingsTable(title, categoryIssues(result, category));
+  FINDING_SECTIONS.forEach(({ title, category, checkType }) => {
+    let issues = categoryIssues(result, category);
+    if (checkType) {
+      issues = issues.filter((issue) => issue.checkType === checkType);
+    }
+    drawFindingsTable(title, issues);
   });
 
   drawRecommendations();

@@ -28,7 +28,19 @@ export const defaultPTRules: PTRule[] = [
   { state: "Tamil Nadu", min_salary: 5000.01, max_salary: 7500, pt_amount: 71 },
   { state: "Tamil Nadu", min_salary: 7500.01, max_salary: 10000, pt_amount: 155 },
   { state: "Tamil Nadu", min_salary: 10000.01, max_salary: 12500, pt_amount: 171 },
-  { state: "Tamil Nadu", min_salary: 12500.01, max_salary: null, pt_amount: 208 }
+  { state: "Tamil Nadu", min_salary: 12500.01, max_salary: null, pt_amount: 208 },
+  { state: "Andhra Pradesh", min_salary: 0, max_salary: 15000, pt_amount: 0 },
+  { state: "Andhra Pradesh", min_salary: 15000.01, max_salary: 20000, pt_amount: 150 },
+  { state: "Andhra Pradesh", min_salary: 20000.01, max_salary: null, pt_amount: 200 },
+  { state: "Assam", min_salary: 0, max_salary: 15000, pt_amount: 0 },
+  { state: "Assam", min_salary: 15000.01, max_salary: 25000, pt_amount: 180 },
+  { state: "Assam", min_salary: 25000.01, max_salary: null, pt_amount: 208 },
+  { state: "Bihar", min_salary: 0, max_salary: 25000, pt_amount: 0 },
+  { state: "Bihar", min_salary: 25000.01, max_salary: 41666.67, pt_amount: 83.33 },
+  { state: "Bihar", min_salary: 41666.68, max_salary: 83333.33, pt_amount: 166.67 },
+  { state: "Bihar", min_salary: 83333.34, max_salary: null, pt_amount: 208.33 },
+  { state: "Gujarat", min_salary: 0, max_salary: 11999.99, pt_amount: 0 },
+  { state: "Gujarat", min_salary: 12000, max_salary: null, pt_amount: 200 }
 ];
 
 let cachedRules: ComplianceRule[] | null = null;

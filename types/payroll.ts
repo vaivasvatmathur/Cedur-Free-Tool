@@ -41,6 +41,8 @@ export type ComplianceIssue = {
   message: string;
   expected?: number;
   actual?: number;
+  checkType?: string;
+  contributionType?: string;
 };
 
 export type EmployeeComplianceLog = {

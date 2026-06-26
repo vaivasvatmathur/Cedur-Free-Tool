@@ -15,6 +15,7 @@ import { validateHRA, calculateHraExemption } from "./validators/hra";
 import { validateTaxRegime } from "./validators/taxRegime";
 import { getCachedPTRules, getCachedRuleMap, getRuleNumber, percentRule } from "@/lib/services/ruleService";
 import type { ComplianceRuleMap, PTRule } from "@/types/payroll";
+import { calculatePayrollHealthScore } from "@/lib/compliance-score";
 
 const round = (value: number) => Math.round(value);
 
@@ -76,12 +77,55 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       });
     }
 
-    const pfWage = row.basicSalary + row.dearnessAllowance;
+        const pfWage = row.basicSalary + row.dearnessAllowance;
     const esiThreshold = getRuleNumber(rules, "ESI_THRESHOLD");
     const epsMaxAmount = getRuleNumber(rules, "EPS_MAX_AMOUNT");
-    const expectedEmployeeEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYEE_RATE"));
-    const expectedEmployerEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYER_RATE"));
-    const expectedEmployerEps = round(Math.min(pfWage * percentRule(rules, "EPS_RATE"), epsMaxAmount));
+    const pfThreshold = getRuleNumber(rules, "PF_THRESHOLD");
+
+    let expectedEmployeeEpf = 0;
+    let expectedEmployerEpf = 0;
+    let expectedEmployerEps = 0;
+
+    const isNotParticipant = pfWage > pfThreshold && row.employeeEpf === 0 && row.employerEpf === 0 && row.employerEps === 0;
+
+    if (isNotParticipant) {
+      expectedEmployeeEpf = 0;
+      expectedEmployerEpf = 0;
+      expectedEmployerEps = 0;
+    } else if (pfWage <= pfThreshold) {
+      expectedEmployeeEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYEE_RATE"));
+      expectedEmployerEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYER_RATE"));
+      expectedEmployerEps = round(pfWage * percentRule(rules, "EPS_RATE"));
+    } else {
+      // pfWage > pfThreshold and participating
+      const expectedCeilingEPF = round(pfThreshold * percentRule(rules, "EPF_EMPLOYEE_RATE"));
+      const expectedActualSalaryEPF = round(pfWage * percentRule(rules, "EPF_EMPLOYEE_RATE"));
+      const expectedCeilingEmployerEpf = round(pfThreshold * percentRule(rules, "EPF_EMPLOYER_RATE"));
+      const expectedActualEmployerEpf = round(pfWage * percentRule(rules, "EPF_EMPLOYER_RATE"));
+
+      const distCeiling = Math.abs(row.employeeEpf - expectedCeilingEPF);
+      const distActual = Math.abs(row.employeeEpf - expectedActualSalaryEPF);
+      
+      let epfMethod: "ceiling" | "actual";
+      if (row.employeeEpf > 0) {
+        epfMethod = distCeiling < distActual ? "ceiling" : "actual";
+      } else {
+        const empDistCeiling = Math.abs(row.employerEpf - expectedCeilingEmployerEpf);
+        const empDistActual = Math.abs(row.employerEpf - expectedActualEmployerEpf);
+        epfMethod = empDistCeiling < empDistActual ? "ceiling" : "actual";
+      }
+
+      if (epfMethod === "ceiling") {
+        expectedEmployeeEpf = expectedCeilingEPF;
+        expectedEmployerEpf = expectedCeilingEmployerEpf;
+        expectedEmployerEps = epsMaxAmount;
+      } else {
+        expectedEmployeeEpf = expectedActualSalaryEPF;
+        expectedEmployerEpf = expectedActualEmployerEpf;
+        expectedEmployerEps = epsMaxAmount;
+      }
+    }
+
     const expectedEmployeeEsi = round(row.grossSalary * percentRule(rules, "ESI_EMPLOYEE_RATE"));
     const expectedEmployerEsi = round(row.grossSalary * percentRule(rules, "ESI_EMPLOYER_RATE"));
     const pt = expectedProfessionalTax(row.state, row.grossSalary, ptRules);
@@ -102,27 +146,16 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
 
     const epfResults = validateEPF(row, rules);
     epfResults.forEach((res) => {
-      let exp: number | undefined;
-      let act: number | undefined;
-      if (res.issue.includes("mandatory")) {
-        exp = expectedEmployeeEpf;
-        act = row.employeeEpf;
-      } else if (res.issue.includes("Employee EPF deduction")) {
-        exp = expectedEmployeeEpf;
-        act = row.employeeEpf;
-      } else if (res.issue.includes("Employer EPF contribution")) {
-        exp = expectedEmployerEpf;
-        act = row.employerEpf;
-      }
-
       issues.push({
         employeeId: row.employeeId,
         employeeName: row.employeeName,
         category: "EPF",
         severity: mapSeverity(res.severity),
         message: res.issue,
-        expected: exp,
-        actual: act
+        expected: res.expected,
+        actual: res.actual,
+        checkType: res.checkType,
+        contributionType: res.contributionType
       });
     });
 
@@ -134,8 +167,10 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
         category: "EPS",
         severity: mapSeverity(res.severity),
         message: res.issue,
-        expected: expectedEmployerEps,
-        actual: row.employerEps
+        expected: res.expected,
+        actual: res.actual,
+        checkType: res.checkType,
+        contributionType: res.contributionType
       });
     });
 
@@ -222,12 +257,48 @@ export function validatePayroll(rows: PayrollRow[], options: ValidationOptions =
       status: hasCritical ? "Non-Compliant" : hasWarning ? "Review" : "Compliant"
     };
   });
+  let passedChecks = 0;
+  let warningChecks = 0;
+  let failedChecks = 0;
 
-  const criticalCount = issues.filter((issue) => issue.severity === "Critical").length;
-  const warningCount = issues.filter((issue) => issue.severity === "Warning").length;
-  const infoCount = issues.filter((issue) => issue.severity === "Info").length;
-  const score = Math.max(0, Math.min(100, 100 - criticalCount * 10 - warningCount * 5 - infoCount * 2));
+  for (const row of rows) {
+    const empId = row.employeeId;
+    const empIssues = issues.filter((issue) => issue.employeeId === empId);
+
+    const evaluateCheck = (checkIssues: ComplianceIssue[]) => {
+      const hasCritical = checkIssues.some((i) => i.severity === "Critical");
+      const hasWarning = checkIssues.some((i) => i.severity === "Warning");
+      if (hasCritical) {
+        failedChecks++;
+      } else if (hasWarning) {
+        warningChecks++;
+      } else {
+        passedChecks++;
+      }
+    };
+
+    // 1. Employee EPF Check
+    evaluateCheck(empIssues.filter((i) => i.category === "EPF" && i.checkType === "Employee EPF"));
+    // 2. Employer EPF Check
+    evaluateCheck(empIssues.filter((i) => i.category === "EPF" && i.checkType === "Employer EPF"));
+    // 3. Employer EPS Check
+    evaluateCheck(empIssues.filter((i) => i.category === "EPS" && i.checkType === "Employer EPS"));
+    // 4. ESI Check
+    evaluateCheck(empIssues.filter((i) => i.category === "ESI"));
+    // 5. Professional Tax Check
+    evaluateCheck(empIssues.filter((i) => i.category === "Professional Tax"));
+    // 6. HRA Check
+    evaluateCheck(empIssues.filter((i) => i.category === "HRA"));
+    // 7. Tax Regime Check
+    evaluateCheck(empIssues.filter((i) => i.category === "Tax Regime"));
+  }
+
+  const score = calculatePayrollHealthScore(passedChecks, warningChecks, failedChecks);
+
+  const criticalCount = employeeLogs.filter((log) => log.status === "Non-Compliant").length;
+  const warningCount = employeeLogs.filter((log) => log.status === "Review").length;
   const compliantEmployees = employeeLogs.filter((log) => log.status === "Compliant").length;
+  const infoCount = issues.filter((issue) => issue.severity === "Info").length;
 
   return {
     score,

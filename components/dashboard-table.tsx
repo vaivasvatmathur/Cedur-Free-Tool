@@ -24,13 +24,31 @@ export function DashboardTable({ logs }: { logs: EmployeeComplianceLog[] }) {
             </TableCell>
             <TableCell>{log.department}</TableCell>
             <TableCell>
-              <div className="max-w-[420px] text-sm text-slate-700">{log.issue}</div>
+              <div className="max-w-[420px] text-sm text-slate-700">
+                {log.status === "Compliant" ? "Compliant" : log.issue}
+              </div>
               <div className="mt-1 text-xs text-muted-foreground">Gross: {formatCurrency(log.grossSalary)}</div>
             </TableCell>
             <TableCell>
-              <Badge variant={log.severity === "Critical" ? "destructive" : log.severity === "Warning" ? "warning" : "outline"}>
-                {log.severity}
-              </Badge>
+              {(() => {
+                const mappedSeverity = log.status === "Non-Compliant"
+                  ? "Critical"
+                  : log.status === "Review"
+                  ? "Warning"
+                  : "Compliant";
+
+                const badgeClass = mappedSeverity === "Critical"
+                  ? "bg-red-50 text-red-700 border-red-200"
+                  : mappedSeverity === "Warning"
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+                return (
+                  <Badge variant="outline" className={`${badgeClass} font-semibold rounded-full border px-2.5 py-0.5`}>
+                    {mappedSeverity}
+                  </Badge>
+                );
+              })()}
             </TableCell>
             <TableCell>
               <Badge

@@ -41,6 +41,15 @@ function savePayrollSession(rows: PayrollRow[], companyInfo: CompanyInfo) {
   window.sessionStorage.setItem("cedur-company-info", JSON.stringify(companyInfo));
 }
 
+const processingSteps = [
+  { progress: 15, message: "Validating EPF Rules..." },
+  { progress: 35, message: "Checking EPS Contributions..." },
+  { progress: 55, message: "Analyzing ESI Eligibility..." },
+  { progress: 75, message: "Calculating HRA Exemptions..." },
+  { progress: 90, message: "Verifying Professional Tax..." },
+  { progress: 100, message: "Generating Compliance Report..." }
+];
+
 export function UploadWorkflow() {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
@@ -49,45 +58,58 @@ export function UploadWorkflow() {
   const [rows, setRows] = useState<PayrollRow[]>([]);
   const [missingColumns, setMissingColumns] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
-  const [isParsing, setIsParsing] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedAt, setUploadedAt] = useState<Date | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const { ruleMap, ptRules } = useComplianceRules();
+  
   const result = useMemo(() => validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [rows, companyInfo.payrollMonth, ruleMap, ptRules]);
+
+  const simulateProcessing = async (onSuccess: () => void) => {
+    setIsProcessing(true);
+    setProgress(0);
+    
+    for (let i = 0; i < processingSteps.length; i++) {
+      setCurrentStepIndex(i);
+      setProgress(processingSteps[i].progress);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    
+    setIsProcessing(false);
+    setCurrentStepIndex(-1);
+    onSuccess();
+  };
 
   async function handleFile(file?: File) {
     if (!file) return;
-    setIsParsing(true);
     setMissingColumns([]);
     setFileName(file.name);
     setRows([]);
     setUploadState("empty");
     setUploadedAt(null);
-    setProgress(24);
+
     const formData = new FormData();
     formData.append("file", file);
     fetch("/api/upload", { method: "POST", body: formData }).catch(() => undefined);
+    
     const parsed = await parsePayrollFile(file);
-    setProgress(72);
     if (parsed.missingColumns.length) {
       setRows([]);
       setMissingColumns(parsed.missingColumns);
       setFileName("");
       setUploadedAt(null);
       setUploadState("empty");
-      setProgress(0);
-      setIsParsing(false);
       return;
-    } else {
-      setRows(parsed.rows);
+    }
+
+    setRows(parsed.rows);
+
+    await simulateProcessing(() => {
       setUploadedAt(new Date());
       setUploadState("uploaded");
       savePayrollSession(parsed.rows, companyInfo);
-    }
-    setTimeout(() => {
-      setProgress(100);
-      setIsParsing(false);
-    }, 450);
+    });
   }
 
   function proceedToDashboard() {
@@ -101,7 +123,7 @@ export function UploadWorkflow() {
     setRows([]);
     setMissingColumns([]);
     setProgress(0);
-    setIsParsing(false);
+    setIsProcessing(false);
     setUploadedAt(null);
     setFileInputKey((key) => key + 1);
   }
@@ -115,7 +137,32 @@ export function UploadWorkflow() {
         </CardHeader>
         <CardContent className="p-6">
           <AnimatePresence mode="wait">
-            {uploadState === "empty" ? (
+            {isProcessing ? (
+              <motion.div
+                key="processing"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="flex flex-col items-center justify-center py-10 text-center"
+              >
+                <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-cedur-50 text-cedur-700">
+                  <Loader2 className="h-10 w-10 animate-spin text-[#835ef5]" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">
+                  {processingSteps[currentStepIndex]?.message || "Analyzing compliance..."}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Auditing {rows.length} employee records for statutory compliance.
+                </p>
+                <div className="mt-6 w-full max-w-md">
+                  <Progress value={progress} />
+                  <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+                    <span>Statutory Audit Progress</span>
+                    <span>{progress}%</span>
+                  </div>
+                </div>
+              </motion.div>
+            ) : uploadState === "empty" ? (
               <motion.div
                 key="empty-upload"
                 initial={{ opacity: 0, y: 12 }}
@@ -137,7 +184,7 @@ export function UploadWorkflow() {
                   </div>
                   <h2 className="mt-5 text-2xl font-bold">Drag and drop payroll file</h2>
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">Supports .csv, .xlsx, and .xls with the statutory payroll columns listed below.</p>
-                  <Button className="mt-5" type="button" disabled={isParsing}>{isParsing ? "Processing..." : "Choose File"}</Button>
+                  <Button className="mt-5" type="button" disabled={isProcessing}>{isProcessing ? "Processing..." : "Choose File"}</Button>
                   <input key={fileInputKey} id="payroll-file" type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(event) => handleFile(event.target.files?.[0])} />
                 </label>
 
@@ -207,15 +254,6 @@ export function UploadWorkflow() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          <AnimatePresence>
-            {(isParsing || progress > 0) && uploadState === "empty" && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-5">
-                <Progress value={progress} />
-                <p className="mt-2 text-xs text-muted-foreground">{isParsing ? "Checking required columns and statutory payroll rules..." : "Validation complete"}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </CardContent>
       </Card>
 
@@ -234,7 +272,7 @@ export function UploadWorkflow() {
             ["ESI Scan", ["ESI"]],
             ["PT & HRA Scan", ["Professional Tax", "HRA", "Tax Regime"]]
           ].map(([label, categories]) => {
-            const status = getScanStatus(categories as string[], result.issues, uploadState, isParsing);
+            const status = getScanStatus(categories as string[], result.issues, uploadState, isProcessing);
             return <ValidationStatusItem key={String(label)} label={String(label)} status={status} />;
           })}
         </CardContent>
@@ -245,8 +283,8 @@ export function UploadWorkflow() {
 
 type ScanStatus = "Pending" | "Processing" | "Passed" | "Warning" | "Failed";
 
-function getScanStatus(categories: string[], issues: ReturnType<typeof validatePayroll>["issues"], uploadState: "empty" | "uploaded", isParsing: boolean): ScanStatus {
-  if (isParsing) return "Processing";
+function getScanStatus(categories: string[], issues: ReturnType<typeof validatePayroll>["issues"], uploadState: "empty" | "uploaded", isProcessing: boolean): ScanStatus {
+  if (isProcessing) return "Processing";
   if (uploadState === "empty") return "Pending";
   const scanIssues = issues.filter((issue) => categories.includes(issue.category));
   if (scanIssues.some((issue) => issue.severity === "Critical")) return "Failed";
@@ -292,16 +330,60 @@ export function ManualEntryWorkflow() {
   const router = useRouter();
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(sampleCompanyInfo);
   const [manualRows, setManualRows] = useState<PayrollRow[]>([blankEmployee(sampleCompanyInfo.state)]);
+  const [progress, setProgress] = useState(0);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [isProcessing, setIsProcessing] = useState(false);
   const { ruleMap, ptRules } = useComplianceRules();
+  
   const result = useMemo(() => validatePayroll(manualRows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }), [manualRows, companyInfo.payrollMonth, ruleMap, ptRules]);
+
+  const simulateProcessing = async (onSuccess: () => void) => {
+    setIsProcessing(true);
+    setProgress(0);
+    
+    for (let i = 0; i < processingSteps.length; i++) {
+      setCurrentStepIndex(i);
+      setProgress(processingSteps[i].progress);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    
+    setIsProcessing(false);
+    setCurrentStepIndex(-1);
+    onSuccess();
+  };
 
   function updateManualRow(index: number, patch: Partial<PayrollRow>) {
     setManualRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
   function proceedToDashboard() {
-    savePayrollSession(manualRows, companyInfo);
-    router.push("/dashboard");
+    simulateProcessing(() => {
+      savePayrollSession(manualRows, companyInfo);
+      router.push("/dashboard");
+    });
+  }
+
+  if (isProcessing) {
+    return (
+      <Card className="overflow-hidden p-10 flex flex-col items-center justify-center min-h-[400px] text-center">
+        <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-cedur-50 text-cedur-700">
+          <Loader2 className="h-10 w-10 animate-spin text-[#835ef5]" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-800">
+          {processingSteps[currentStepIndex]?.message || "Auditing records..."}
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Auditing {manualRows.length} employee records for statutory compliance.
+        </p>
+        <div className="mt-6 w-full max-w-md">
+          <Progress value={progress} />
+          <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+            <span>Statutory Audit Progress</span>
+            <span>{progress}%</span>
+          </div>
+        </div>
+      </Card>
+    );
   }
 
   return (

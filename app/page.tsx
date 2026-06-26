@@ -104,7 +104,7 @@ export default function LandingPage() {
                   {[
                     ["EPF / EPS Analysis", "Checked Basic + DA slabs and voluntary caps", "4 Rules Checked"],
                     ["ESI Eligibility Check", "Flagged monthly gross salary limits", "1 Risk Alert"],
-                    ["Professional Tax", "State slab audit for MH, KA, TN, and DL", "Validated"],
+                    ["Professional Tax", "State slab audit for MH, KA, and TN", "Validated"],
                     ["HRA Tax Exemptions", "Calculated 3 statutory exemption routes", "Old Regime Only"]
                   ].map(([label, desc, status]) => (
                     <div key={label} className="rounded-xl border bg-muted/20 p-3 hover:bg-muted/40 transition">

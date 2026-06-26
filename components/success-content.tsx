@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarCheck, FileDown, MailCheck, MessageCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,17 +13,26 @@ import { sampleCompanyInfo, samplePayrollRows } from "@/lib/sample-data";
 import { validatePayroll } from "@/lib/validation";
 import type { CompanyInfo, PayrollRow } from "@/types/payroll";
 import { useComplianceRules } from "@/hooks/use-compliance-rules";
+
 type Contact = {
   email?: string;
   phone?: string;
 };
+
 export function SuccessContent() {
+  const router = useRouter();
   const [contact, setContact] = useState<Contact>({});
   const { ruleMap, ptRules, isLoading } = useComplianceRules();
+
   useEffect(() => {
     if (isLoading) return;
-    const savedContact = window.sessionStorage.getItem("cedur-report-contact");
     const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
+    if (!savedRows || (JSON.parse(savedRows) as PayrollRow[]).length === 0) {
+      router.push("/upload");
+      return;
+    }
+
+    const savedContact = window.sessionStorage.getItem("cedur-report-contact");
     const savedCompany = window.sessionStorage.getItem("cedur-company-info");
     const rows = savedRows ? (JSON.parse(savedRows) as PayrollRow[]) : samplePayrollRows;
     const companyInfo = savedCompany ? (JSON.parse(savedCompany) as CompanyInfo) : sampleCompanyInfo;
@@ -31,7 +41,8 @@ export function SuccessContent() {
       validatePayroll(rows, { payrollMonth: companyInfo.payrollMonth, rules: ruleMap, ptRules }),
       companyInfo
     );
-  }, [isLoading, ptRules, ruleMap]);
+  }, [isLoading, ptRules, ruleMap, router]);
+
   return (
     <section className="page-shell py-10">
       <Card className="overflow-hidden">

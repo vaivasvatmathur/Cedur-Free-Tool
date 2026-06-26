@@ -3,19 +3,50 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileUp, LayoutDashboard, Menu } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, FileText, FileUp, Keyboard, LayoutDashboard, Menu, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const navItems = [
-  { href: "/upload", label: "Upload", icon: FileUp, active: true },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Insights", icon: BarChart3 }
-];
 
 export function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const visibleNavItems = isHome ? navItems.filter((item) => item.href !== "/upload") : navItems;
+  const [hasData, setHasData] = useState(false);
+
+  useEffect(() => {
+    const savedRows = window.sessionStorage.getItem("cedur-payroll-rows");
+    if (savedRows && JSON.parse(savedRows).length > 0) {
+      setHasData(true);
+    }
+  }, [pathname]);
+
+  const handleUploadNew = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.sessionStorage.removeItem("cedur-payroll-rows");
+    window.sessionStorage.removeItem("cedur-company-info");
+    window.sessionStorage.removeItem("cedur-report-contact");
+    window.location.href = "/upload";
+  };
+
+  interface NavItem {
+    href: string;
+    label: string;
+    icon: any;
+    onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  }
+
+  const beforeUploadItems: NavItem[] = [
+    { href: "/upload", label: "Upload Payroll", icon: FileUp },
+    { href: "/manual", label: "Manual Entry", icon: Keyboard }
+  ];
+
+  const afterUploadItems: NavItem[] = [
+    { href: "/upload", label: "Upload New File", icon: RotateCcw, onClick: handleUploadNew },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/findings", label: "Detailed Findings", icon: FileText },
+    { href: "/report", label: "Download Report", icon: Download }
+  ];
+
+  const visibleNavItems = hasData ? afterUploadItems : beforeUploadItems;
 
   return (
     <header className={`sticky top-0 z-40 bg-transparent px-4 sm:px-6 ${isHome ? "pb-2 pt-3 lg:pb-3 lg:pt-4" : "py-4 lg:py-6"}`}>
@@ -32,36 +63,38 @@ export function Navbar() {
         </Link>
 
         <nav className="hidden items-center gap-4 lg:flex xl:gap-8">
-          {visibleNavItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={
-                pathname === item.href
-                  ? "inline-flex h-14 items-center justify-center rounded-full bg-[#f0eeff] px-8 text-base font-semibold text-[#2f26ff] transition hover:bg-[#e9e6ff]"
-                  : "inline-flex h-14 items-center justify-center gap-2 rounded-full px-2 text-base font-semibold text-slate-800 transition hover:text-[#835ef5]"
-              }
-            >
-              <item.icon className="h-5 w-5" />
-              <span>{item.label}</span>
-            </Link>
-          ))}
+          {visibleNavItems.map((item) => {
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.href}
+                  onClick={item.onClick}
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-full px-2 text-base font-semibold text-slate-800 transition hover:text-[#835ef5]"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            }
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  pathname === item.href
+                    ? "inline-flex h-14 items-center justify-center rounded-full bg-[#f0eeff] px-8 text-base font-semibold text-[#2f26ff] transition hover:bg-[#e9e6ff]"
+                    : "inline-flex h-14 items-center justify-center gap-2 rounded-full px-2 text-base font-semibold text-slate-800 transition hover:text-[#835ef5]"
+                }
+              >
+                <item.icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
-        {!isHome && (
-          <div className="hidden items-center gap-7 lg:flex">
-            <Button className="h-14 rounded-full bg-[#243044] px-8 text-base shadow-[0_16px_32px_rgba(36,48,68,0.24)] hover:bg-[#1b2638]" asChild>
-              <Link href="/upload">Upload Payroll</Link>
-            </Button>
-          </div>
-        )}
-
+        {/* Mobile menu trigger */}
         <div className="flex items-center gap-2 lg:hidden">
-          {!isHome && (
-            <Button className="h-11 rounded-full bg-[#243044] px-5 hover:bg-[#1b2638]" asChild>
-              <Link href="/upload">Upload</Link>
-            </Button>
-          )}
           <Button variant="ghost" size="icon" className="rounded-full text-slate-800" aria-label="Open menu">
             <Menu className="h-6 w-6" />
           </Button>
